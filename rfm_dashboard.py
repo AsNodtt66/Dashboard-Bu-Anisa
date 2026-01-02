@@ -12,7 +12,7 @@ import os
 # 1. LOAD DATA
 # =========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(BASE_DIR, "bank data.xlsx")
+file_path = os.path.join(BASE_DIR, "bank data.csv")
 
 df = pd.read_excel(file_path)
 
@@ -139,8 +139,9 @@ plt.show()
 # =========================================
 # 7. EXPORT HASIL (OPSIONAL)
 # =========================================
-output_path = os.path.join(BASE_DIR, "hasil_rfm.xlsx")
+output_path = os.path.join(BASE_DIR, "hasil_rfm.csv")
 rfm.to_excel(output_path)
 
 print("\n✅ Analisis RFM selesai")
 print("📁 File hasil:", output_path)
+
