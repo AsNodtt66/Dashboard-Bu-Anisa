@@ -1,12 +1,11 @@
 # =========================================
-# RFM DASHBOARD - STREAMLIT (FINAL FIX ALL)
+# RFM DASHBOARD - STREAMLIT (FIXED & STABLE)
 # =========================================
 
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 from datetime import timedelta
-import os
 from io import BytesIO
 
 # =========================================
@@ -20,31 +19,32 @@ st.set_page_config(
 st.title("📊 RFM Analysis Dashboard")
 
 # =========================================
-# LOAD DATA CSV
+# UPLOAD DATA
 # =========================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(BASE_DIR, "bank data 2.csv")
+uploaded_file = st.file_uploader(
+    "📂 Upload file CSV (delimiter ;)",
+    type=["csv"]
+)
+
+if uploaded_file is None:
+    st.warning("Silakan upload file CSV terlebih dahulu")
+    st.stop()
 
 df = pd.read_csv(
-    file_path,
-    sep=';',          # delimiter CSV Excel Indonesia
-    engine='python',
-    encoding='latin1'
+    uploaded_file,
+    sep=";",
+    encoding="latin1"
 )
 
 st.success("✅ File CSV berhasil dibaca")
-st.write(df.head())
+st.dataframe(df.head())
 
 # =========================================
 # DATA CLEANING
 # =========================================
-df = df.rename(columns={
-    'CustomerID': 'CustomerID',
-    'TransactionDate': 'TransactionDate',
-    'Amount': 'Amount'
-})
-
-df['TransactionDate'] = pd.to_datetime(df['TransactionDate'], errors='coerce')
+df['TransactionDate'] = pd.to_datetime(
+    df['TransactionDate'], errors='coerce'
+)
 
 df['Amount'] = (
     df['Amount']
@@ -63,37 +63,26 @@ st.info(f"Jumlah data transaksi bersih: {len(df)}")
 # =========================================
 snapshot_date = df['TransactionDate'].max() + timedelta(days=1)
 
-rfm = df.groupby('CustomerID').agg({
-    'TransactionDate': lambda x: (snapshot_date - x.max()).days,
-    'CustomerID': 'count',
-    'Amount': 'sum'
-})
-
-rfm.columns = ['Recency', 'Frequency', 'Monetary']
+rfm = df.groupby('CustomerID').agg(
+    Recency=('TransactionDate', lambda x: (snapshot_date - x.max()).days),
+    Frequency=('CustomerID', 'count'),
+    Monetary=('Amount', 'sum')
+)
 
 # =========================================
-# RFM SCORING (INT)
+# RFM SCORING (ANTI ERROR)
 # =========================================
-rfm['R_Score'] = pd.qcut(
-    rfm['Recency'],
-    5,
-    labels=[5, 4, 3, 2, 1],
-    duplicates='drop'
-).astype(int)
+def safe_qcut(series, labels):
+    q = min(len(series.unique()), len(labels))
+    return pd.qcut(
+        series.rank(method="first"),
+        q=q,
+        labels=labels[-q:]
+    ).astype(int)
 
-rfm['F_Score'] = pd.qcut(
-    rfm['Frequency'].rank(method='first'),
-    5,
-    labels=[1, 2, 3, 4, 5],
-    duplicates='drop'
-).astype(int)
-
-rfm['M_Score'] = pd.qcut(
-    rfm['Monetary'],
-    5,
-    labels=[1, 2, 3, 4, 5],
-    duplicates='drop'
-).astype(int)
+rfm['R_Score'] = safe_qcut(rfm['Recency'], [5,4,3,2,1])
+rfm['F_Score'] = safe_qcut(rfm['Frequency'], [1,2,3,4,5])
+rfm['M_Score'] = safe_qcut(rfm['Monetary'], [1,2,3,4,5])
 
 rfm['RFM_Score'] = (
     rfm['R_Score'].astype(str) +
@@ -105,7 +94,7 @@ rfm['RFM_Score'] = (
 # SEGMENTASI RFM
 # =========================================
 def rfm_segment(row):
-    if row['R_Score'] == 5 and row['F_Score'] == 5:
+    if row['RFM_Score'] >= '555':
         return 'Champions'
     elif row['R_Score'] >= 4 and row['F_Score'] >= 4:
         return 'Loyal Customers'
@@ -130,10 +119,8 @@ col3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
 st.divider()
 
 # =========================================
-# DASHBOARD VISUAL
+# VISUALISASI
 # =========================================
-
-# Grafik 1: Distribusi Segmen (FIXED)
 segment_df = rfm['Segment'].value_counts().reset_index()
 segment_df.columns = ['Segment', 'Jumlah']
 
@@ -145,7 +132,6 @@ fig1 = px.bar(
 )
 st.plotly_chart(fig1, use_container_width=True)
 
-# Grafik 2: Recency vs Frequency
 fig2 = px.scatter(
     rfm,
     x='Recency',
@@ -156,7 +142,6 @@ fig2 = px.scatter(
 )
 st.plotly_chart(fig2, use_container_width=True)
 
-# Grafik 3: Monetary per Segment
 fig3 = px.box(
     rfm,
     x='Segment',
@@ -166,14 +151,11 @@ fig3 = px.box(
 st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================
-# TABEL RFM
+# TABEL & DOWNLOAD
 # =========================================
 st.subheader("📋 Tabel RFM")
 st.dataframe(rfm.reset_index())
 
-# =========================================
-# DOWNLOAD HASIL RFM (FIXED)
-# =========================================
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
     rfm.reset_index().to_excel(writer, index=False, sheet_name='RFM')
