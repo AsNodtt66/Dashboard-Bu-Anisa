@@ -1,5 +1,5 @@
 # =========================================
-# RFM DASHBOARD - STREAMLIT (FINAL DEPLOY)
+# RFM DASHBOARD - STREAMLIT (DEPLOY + UPLOAD)
 # =========================================
 
 import pandas as pd
@@ -87,7 +87,7 @@ rfm = df.groupby('CustomerID').agg(
 )
 
 # =========================================
-# RFM SCORING (ANTI ERROR)
+# RFM SCORING
 # =========================================
 def safe_qcut(series, labels):
     q = min(series.nunique(), len(labels))
@@ -108,7 +108,7 @@ rfm['RFM_Score'] = (
 )
 
 # =========================================
-# SEGMENTASI RFM
+# SEGMENTASI
 # =========================================
 def rfm_segment(row):
     if row['R_Score'] == 5 and row['F_Score'] == 5:
@@ -125,10 +125,9 @@ def rfm_segment(row):
 rfm['Segment'] = rfm.apply(rfm_segment, axis=1)
 
 # =========================================
-# METRIC RINGKAS
+# METRIC
 # =========================================
 c1, c2, c3 = st.columns(3)
-
 c1.metric("Total Customers", rfm.shape[0])
 c2.metric("Total Revenue", f"{rfm['Monetary'].sum():,.0f}")
 c3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
@@ -136,33 +135,58 @@ c3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
 st.divider()
 
 # =========================================
-# DIAGRAM BUNDAR (PIE CHART)
+# VISUALISASI
 # =========================================
-segment_pie = rfm['Segment'].value_counts().reset_index()
-segment_pie.columns = ['Segment', 'Jumlah']
+seg = rfm['Segment'].value_counts().reset_index()
+seg.columns = ['Segment', 'Jumlah']
 
-fig_pie = px.pie(
-    segment_pie,
-    names='Segment',
-    values='Jumlah',
-    title='Distribusi Segmen Pelanggan (RFM)',
-    hole=0.4
+# Diagram Batang
+st.plotly_chart(
+    px.bar(seg, x='Segment', y='Jumlah',
+           title="Distribusi Segmen Pelanggan"),
+    use_container_width=True
 )
 
+# 🔥 DIAGRAM PIE (BUNDAR)
+fig_pie = px.pie(
+    seg,
+    names='Segment',
+    values='Jumlah',
+    title="Distribusi Segmen Pelanggan (Pie Chart)",
+    hole=0.4
+)
 st.plotly_chart(fig_pie, use_container_width=True)
 
-# =========================================
-# TABEL RFM
-# =========================================
-st.subheader("📋 Tabel RFM")
-st.dataframe(rfm.reset_index())
+# Scatter
+st.plotly_chart(
+    px.scatter(
+        rfm,
+        x='Recency',
+        y='Frequency',
+        color='Segment',
+        hover_data=['Monetary'],
+        title="Recency vs Frequency"
+    ),
+    use_container_width=True
+)
+
+# Boxplot
+st.plotly_chart(
+    px.box(
+        rfm,
+        x='Segment',
+        y='Monetary',
+        title="Monetary per Segment"
+    ),
+    use_container_width=True
+)
 
 # =========================================
-# DOWNLOAD EXCEL
+# DOWNLOAD
 # =========================================
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-    rfm.reset_index().to_excel(writer, index=False, sheet_name="RFM")
+    rfm.reset_index().to_excel(writer, index=False)
 
 st.download_button(
     "⬇ Download Hasil RFM (Excel)",
