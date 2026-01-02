@@ -139,9 +139,10 @@ plt.show()
 # =========================================
 # 7. EXPORT HASIL (OPSIONAL)
 # =========================================
-output_path = os.path.join(BASE_DIR, "hasil_rfm.csv")
+output_path = os.path.join(BASE_DIR, "hasil_rfm.xlsx")
 rfm.to_excel(output_path)
 
 print("\n✅ Analisis RFM selesai")
 print("📁 File hasil:", output_path)
+
 
