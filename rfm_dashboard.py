@@ -1,5 +1,5 @@
 # =========================================
-# RFM DASHBOARD - STREAMLIT (FIXED & STABLE)
+# RFM DASHBOARD - STREAMLIT (DEPLOY READY)
 # =========================================
 
 import pandas as pd
@@ -7,6 +7,7 @@ import streamlit as st
 import plotly.express as px
 from datetime import timedelta
 from io import BytesIO
+import os
 
 # =========================================
 # KONFIGURASI HALAMAN
@@ -19,24 +20,39 @@ st.set_page_config(
 st.title("📊 RFM Analysis Dashboard")
 
 # =========================================
-# UPLOAD DATA
+# LOAD DATA CSV (CLOUD SAFE)
 # =========================================
-uploaded_file = st.file_uploader(
-    "📂 Upload file CSV (delimiter ;)",
-    type=["csv"]
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(BASE_DIR, "bank data 2.csv")
 
-if uploaded_file is None:
-    st.warning("Silakan upload file CSV terlebih dahulu")
-    st.stop()
+df = None
 
-df = pd.read_csv(
-    uploaded_file,
-    sep=";",
-    encoding="latin1"
-)
+if os.path.exists(file_path):
+    # ✅ Jika file ada di repo
+    df = pd.read_csv(
+        file_path,
+        sep=";",
+        encoding="latin1"
+    )
+    st.success("✅ Data dibaca dari repository")
+else:
+    # ✅ Fallback upload (WAJIB untuk Cloud)
+    st.warning("⚠ File CSV tidak ditemukan di repo")
+    uploaded_file = st.file_uploader(
+        "📂 Upload file CSV (delimiter ;)",
+        type=["csv"]
+    )
 
-st.success("✅ File CSV berhasil dibaca")
+    if uploaded_file is not None:
+        df = pd.read_csv(
+            uploaded_file,
+            sep=";",
+            encoding="latin1"
+        )
+        st.success("✅ Data berhasil diupload")
+    else:
+        st.stop()
+
 st.dataframe(df.head())
 
 # =========================================
@@ -70,10 +86,10 @@ rfm = df.groupby('CustomerID').agg(
 )
 
 # =========================================
-# RFM SCORING (ANTI ERROR)
+# RFM SCORING (ANTI QCUT ERROR)
 # =========================================
 def safe_qcut(series, labels):
-    q = min(len(series.unique()), len(labels))
+    q = min(series.nunique(), len(labels))
     return pd.qcut(
         series.rank(method="first"),
         q=q,
@@ -94,7 +110,7 @@ rfm['RFM_Score'] = (
 # SEGMENTASI RFM
 # =========================================
 def rfm_segment(row):
-    if row['RFM_Score'] >= '555':
+    if row['R_Score'] == 5 and row['F_Score'] == 5:
         return 'Champions'
     elif row['R_Score'] >= 4 and row['F_Score'] >= 4:
         return 'Loyal Customers'
@@ -124,31 +140,33 @@ st.divider()
 segment_df = rfm['Segment'].value_counts().reset_index()
 segment_df.columns = ['Segment', 'Jumlah']
 
-fig1 = px.bar(
-    segment_df,
-    x='Segment',
-    y='Jumlah',
-    title="Distribusi Segmen Pelanggan"
+st.plotly_chart(
+    px.bar(segment_df, x='Segment', y='Jumlah',
+           title="Distribusi Segmen Pelanggan"),
+    use_container_width=True
 )
-st.plotly_chart(fig1, use_container_width=True)
 
-fig2 = px.scatter(
-    rfm,
-    x='Recency',
-    y='Frequency',
-    color='Segment',
-    hover_data=['Monetary'],
-    title="Recency vs Frequency"
+st.plotly_chart(
+    px.scatter(
+        rfm,
+        x='Recency',
+        y='Frequency',
+        color='Segment',
+        hover_data=['Monetary'],
+        title="Recency vs Frequency"
+    ),
+    use_container_width=True
 )
-st.plotly_chart(fig2, use_container_width=True)
 
-fig3 = px.box(
-    rfm,
-    x='Segment',
-    y='Monetary',
-    title="Monetary Value per Segment"
+st.plotly_chart(
+    px.box(
+        rfm,
+        x='Segment',
+        y='Monetary',
+        title="Monetary Value per Segment"
+    ),
+    use_container_width=True
 )
-st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================
 # TABEL & DOWNLOAD
@@ -158,10 +176,10 @@ st.dataframe(rfm.reset_index())
 
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-    rfm.reset_index().to_excel(writer, index=False, sheet_name='RFM')
+    rfm.reset_index().to_excel(writer, index=False)
 
 st.download_button(
-    label="⬇ Download Hasil RFM (Excel)",
+    "⬇ Download Hasil RFM (Excel)",
     data=output.getvalue(),
     file_name="hasil_rfm.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
