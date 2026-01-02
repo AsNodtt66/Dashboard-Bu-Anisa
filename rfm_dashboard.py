@@ -1,5 +1,5 @@
 # =========================================
-# RFM DASHBOARD - STREAMLIT (DEPLOY + UPLOAD)
+# RFM DASHBOARD - STREAMLIT (FINAL DEPLOY)
 # =========================================
 
 import pandas as pd
@@ -35,11 +35,7 @@ if use_upload:
     if uploaded_file is None:
         st.stop()
 
-    df = pd.read_csv(
-        uploaded_file,
-        sep=";",
-        encoding="latin1"
-    )
+    df = pd.read_csv(uploaded_file, sep=";", encoding="latin1")
     st.success("✅ Data berhasil diupload")
 
 else:
@@ -50,11 +46,7 @@ else:
         st.error("❌ File CSV default tidak ditemukan")
         st.stop()
 
-    df = pd.read_csv(
-        file_path,
-        sep=";",
-        encoding="latin1"
-    )
+    df = pd.read_csv(file_path, sep=";", encoding="latin1")
     st.success("✅ Data dibaca dari repository")
 
 # =========================================
@@ -116,7 +108,7 @@ rfm['RFM_Score'] = (
 )
 
 # =========================================
-# SEGMENTASI
+# SEGMENTASI RFM
 # =========================================
 def rfm_segment(row):
     if row['R_Score'] == 5 and row['F_Score'] == 5:
@@ -133,9 +125,10 @@ def rfm_segment(row):
 rfm['Segment'] = rfm.apply(rfm_segment, axis=1)
 
 # =========================================
-# METRIC
+# METRIC RINGKAS
 # =========================================
 c1, c2, c3 = st.columns(3)
+
 c1.metric("Total Customers", rfm.shape[0])
 c2.metric("Total Revenue", f"{rfm['Monetary'].sum():,.0f}")
 c3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
@@ -143,28 +136,33 @@ c3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
 st.divider()
 
 # =========================================
-# VISUALISASI
+# DIAGRAM BUNDAR (PIE CHART)
 # =========================================
-seg = rfm['Segment'].value_counts().reset_index()
-seg.columns = ['Segment', 'Jumlah']
+segment_pie = rfm['Segment'].value_counts().reset_index()
+segment_pie.columns = ['Segment', 'Jumlah']
 
-st.plotly_chart(px.bar(seg, x='Segment', y='Jumlah'), use_container_width=True)
-st.plotly_chart(
-    px.scatter(rfm, x='Recency', y='Frequency', color='Segment',
-               hover_data=['Monetary']),
-    use_container_width=True
-)
-st.plotly_chart(
-    px.box(rfm, x='Segment', y='Monetary'),
-    use_container_width=True
+fig_pie = px.pie(
+    segment_pie,
+    names='Segment',
+    values='Jumlah',
+    title='Distribusi Segmen Pelanggan (RFM)',
+    hole=0.4
 )
 
+st.plotly_chart(fig_pie, use_container_width=True)
+
 # =========================================
-# DOWNLOAD
+# TABEL RFM
+# =========================================
+st.subheader("📋 Tabel RFM")
+st.dataframe(rfm.reset_index())
+
+# =========================================
+# DOWNLOAD EXCEL
 # =========================================
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-    rfm.reset_index().to_excel(writer, index=False)
+    rfm.reset_index().to_excel(writer, index=False, sheet_name="RFM")
 
 st.download_button(
     "⬇ Download Hasil RFM (Excel)",
