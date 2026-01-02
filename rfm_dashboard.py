@@ -1,41 +1,65 @@
 # =========================================
-# RFM ANALYSIS + DASHBOARD VISUAL
+# RFM DASHBOARD - STREAMLIT (FINAL FIX ALL)
 # =========================================
 
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import streamlit as st
+import plotly.express as px
 from datetime import timedelta
 import os
+from io import BytesIO
 
 # =========================================
-# 1. LOAD DATA
+# KONFIGURASI HALAMAN
+# =========================================
+st.set_page_config(
+    page_title="RFM Dashboard",
+    layout="wide"
+)
+
+st.title("📊 RFM Analysis Dashboard")
+
+# =========================================
+# LOAD DATA CSV
 # =========================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(BASE_DIR, "bank data.csv")
+file_path = os.path.join(BASE_DIR, "bank data 2.csv")
 
-df = pd.read_excel(file_path)
+df = pd.read_csv(
+    file_path,
+    sep=';',          # delimiter CSV Excel Indonesia
+    engine='python',
+    encoding='latin1'
+)
+
+st.success("✅ File CSV berhasil dibaca")
+st.write(df.head())
 
 # =========================================
-# 2. DATA CLEANING
+# DATA CLEANING
 # =========================================
-# Pastikan nama kolom sesuai
 df = df.rename(columns={
     'CustomerID': 'CustomerID',
     'TransactionDate': 'TransactionDate',
     'Amount': 'Amount'
 })
 
-# Konversi tanggal
 df['TransactionDate'] = pd.to_datetime(df['TransactionDate'], errors='coerce')
 
-# Hapus data kosong
+df['Amount'] = (
+    df['Amount']
+    .astype(str)
+    .str.replace('.', '', regex=False)
+    .str.replace(',', '.', regex=False)
+    .astype(float)
+)
+
 df = df.dropna(subset=['CustomerID', 'TransactionDate', 'Amount'])
 
-print("Jumlah data bersih:", len(df))
+st.info(f"Jumlah data transaksi bersih: {len(df)}")
 
 # =========================================
-# 3. HITUNG RFM
+# HITUNG RFM
 # =========================================
 snapshot_date = df['TransactionDate'].max() + timedelta(days=1)
 
@@ -48,19 +72,28 @@ rfm = df.groupby('CustomerID').agg({
 rfm.columns = ['Recency', 'Frequency', 'Monetary']
 
 # =========================================
-# 4. RFM SCORING
+# RFM SCORING (INT)
 # =========================================
 rfm['R_Score'] = pd.qcut(
-    rfm['Recency'], 5, labels=[5,4,3,2,1], duplicates='drop'
-)
+    rfm['Recency'],
+    5,
+    labels=[5, 4, 3, 2, 1],
+    duplicates='drop'
+).astype(int)
 
 rfm['F_Score'] = pd.qcut(
-    rfm['Frequency'].rank(method='first'), 5, labels=[1,2,3,4,5], duplicates='drop'
-)
+    rfm['Frequency'].rank(method='first'),
+    5,
+    labels=[1, 2, 3, 4, 5],
+    duplicates='drop'
+).astype(int)
 
 rfm['M_Score'] = pd.qcut(
-    rfm['Monetary'], 5, labels=[1,2,3,4,5], duplicates='drop'
-)
+    rfm['Monetary'],
+    5,
+    labels=[1, 2, 3, 4, 5],
+    duplicates='drop'
+).astype(int)
 
 rfm['RFM_Score'] = (
     rfm['R_Score'].astype(str) +
@@ -69,80 +102,85 @@ rfm['RFM_Score'] = (
 )
 
 # =========================================
-# 5. SEGMENTASI PELANGGAN
+# SEGMENTASI RFM
 # =========================================
 def rfm_segment(row):
-    if row['R_Score'] == '5' and row['F_Score'] == '5':
+    if row['R_Score'] == 5 and row['F_Score'] == 5:
         return 'Champions'
-    elif row['R_Score'] >= '4' and row['F_Score'] >= '4':
+    elif row['R_Score'] >= 4 and row['F_Score'] >= 4:
         return 'Loyal Customers'
-    elif row['R_Score'] >= '4':
+    elif row['R_Score'] >= 4:
         return 'Potential Loyalist'
-    elif row['R_Score'] <= '2' and row['F_Score'] >= '4':
+    elif row['R_Score'] <= 2 and row['F_Score'] >= 4:
         return 'At Risk'
     else:
         return 'Others'
 
 rfm['Segment'] = rfm.apply(rfm_segment, axis=1)
 
-print("\nContoh hasil RFM:")
-print(rfm.head())
+# =========================================
+# METRIC RINGKAS
+# =========================================
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Total Customers", rfm.shape[0])
+col2.metric("Total Revenue", f"{rfm['Monetary'].sum():,.0f}")
+col3.metric("Rata-rata Recency (hari)", round(rfm['Recency'].mean(), 1))
+
+st.divider()
 
 # =========================================
-# 6. DASHBOARD VISUAL
+# DASHBOARD VISUAL
 # =========================================
-sns.set(style="whitegrid")
 
-# A. Distribusi Segmentasi
-plt.figure(figsize=(8,5))
-sns.countplot(data=rfm, x='Segment')
-plt.title("Distribusi Segmen Pelanggan")
-plt.xticks(rotation=30)
-plt.tight_layout()
-plt.show()
+# Grafik 1: Distribusi Segmen (FIXED)
+segment_df = rfm['Segment'].value_counts().reset_index()
+segment_df.columns = ['Segment', 'Jumlah']
 
-# B. Recency vs Frequency
-plt.figure(figsize=(8,6))
-sns.scatterplot(
-    data=rfm,
+fig1 = px.bar(
+    segment_df,
+    x='Segment',
+    y='Jumlah',
+    title="Distribusi Segmen Pelanggan"
+)
+st.plotly_chart(fig1, use_container_width=True)
+
+# Grafik 2: Recency vs Frequency
+fig2 = px.scatter(
+    rfm,
     x='Recency',
     y='Frequency',
-    hue='Segment'
+    color='Segment',
+    hover_data=['Monetary'],
+    title="Recency vs Frequency"
 )
-plt.title("Recency vs Frequency")
-plt.tight_layout()
-plt.show()
+st.plotly_chart(fig2, use_container_width=True)
 
-# C. Monetary per Segment
-plt.figure(figsize=(8,5))
-sns.boxplot(
-    data=rfm,
+# Grafik 3: Monetary per Segment
+fig3 = px.box(
+    rfm,
     x='Segment',
-    y='Monetary'
+    y='Monetary',
+    title="Monetary Value per Segment"
 )
-plt.title("Monetary Value per Segment")
-plt.xticks(rotation=30)
-plt.tight_layout()
-plt.show()
-
-# D. Korelasi RFM
-plt.figure(figsize=(6,5))
-sns.heatmap(
-    rfm[['Recency','Frequency','Monetary']].corr(),
-    annot=True,
-    cmap='coolwarm'
-)
-plt.title("Korelasi RFM")
-plt.tight_layout()
-plt.show()
+st.plotly_chart(fig3, use_container_width=True)
 
 # =========================================
-# 7. EXPORT HASIL (OPSIONAL)
+# TABEL RFM
 # =========================================
-output_path = os.path.join(BASE_DIR, "hasil_rfm.xlsx")
-rfm.to_excel(output_path)
+st.subheader("📋 Tabel RFM")
+st.dataframe(rfm.reset_index())
 
-print("\n✅ Analisis RFM selesai")
-print("📁 File hasil:", output_path)
+# =========================================
+# DOWNLOAD HASIL RFM (FIXED)
+# =========================================
+output = BytesIO()
+with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    rfm.reset_index().to_excel(writer, index=False, sheet_name='RFM')
 
-
+st.download_button(
+    label="⬇ Download Hasil RFM (Excel)",
+    data=output.getvalue(),
+    file_name="hasil_rfm.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
